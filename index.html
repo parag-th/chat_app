@@ -82,8 +82,8 @@
 
   /* ---- Chat screen ---- */
   #app{
-    width: min(94vw, 460px);
-    height: min(92vh, 720px);
+    width: min(96vw, 620px);
+    height: min(94vh, 820px);
     background: var(--bg-soft);
     border-radius: 18px;
     border: 1px solid var(--border);
@@ -163,7 +163,7 @@
     gap: 10px;
   }
   .msg{
-    max-width: 82%;
+    max-width: 88%;
     padding: 9px 13px 8px;
     border-radius: 14px;
     font-size: 0.94rem;
@@ -177,7 +177,7 @@
     font-weight:600;
     letter-spacing: 0.02em;
   }
-  .msg .body{ word-wrap: break-word; overflow-wrap: anywhere; }
+  .msg .body{ word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; }
   .msg .body a{ color: inherit; text-decoration: underline; }
   .msg .foot{
     display:flex;
@@ -190,15 +190,17 @@
     font-size: 0.65rem;
     color: rgba(237,234,227,0.45);
   }
-  .bmark-btn{
-    background:none; border:none; padding:2px; cursor:pointer;
-    color: rgba(237,234,227,0.4);
+  .icon-btn, .bmark-btn{
+    background:none; border:none; padding:3px; cursor:pointer;
+    color: rgba(237,234,227,0.45);
     display:flex; align-items:center;
     transition: color 0.15s;
   }
-  .bmark-btn:hover{ color: var(--amber); }
+  .icon-btn:hover, .bmark-btn:hover{ color: var(--amber); }
   .bmark-btn.active{ color: var(--amber); }
-  .bmark-btn svg{ width:14px; height:14px; }
+  .icon-btn.delete:hover{ color: #ff8a65; }
+  .icon-btn.copied{ color: #8ee59a !important; }
+  .icon-btn svg, .bmark-btn svg{ width:15px; height:15px; }
 
   .msg.them{
     background: var(--them);
@@ -211,8 +213,8 @@
     border-bottom-right-radius: 4px;
   }
   .msg.me .time{ color: rgba(255,255,255,0.55); }
-  .msg.me .bmark-btn{ color: rgba(255,255,255,0.55); }
-  .msg.me .bmark-btn:hover, .msg.me .bmark-btn.active{ color: #ffe3b8; }
+  .msg.me .bmark-btn, .msg.me .icon-btn{ color: rgba(255,255,255,0.6); }
+  .msg.me .bmark-btn:hover, .msg.me .bmark-btn.active, .msg.me .icon-btn:hover{ color: #ffe3b8; }
 
   #empty, #emptyBookmarks{
     margin:auto;
@@ -224,30 +226,59 @@
 
   form#composer{
     display:flex;
-    gap: 8px;
+    align-items:flex-end;
+    gap: 10px;
     padding: 14px;
     border-top: 1px solid var(--border);
   }
-  form#composer input{
+  form#composer textarea{
     flex:1;
+    min-height: 64px;
+    max-height: 200px;
     padding: 12px 14px;
-    border-radius: 10px;
+    border-radius: 12px;
     border: 1px solid var(--border);
     background: var(--card);
     color: var(--text);
-    font-size: 0.95rem;
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.4;
     outline:none;
+    resize: none;
+    display:block;
   }
-  form#composer input:focus{ border-color: var(--amber-dim); }
+  form#composer textarea:focus{ border-color: var(--amber-dim); }
   form#composer button{
-    padding: 0 18px;
-    border-radius: 10px;
+    height: 46px;
+    padding: 0 22px;
+    border-radius: 12px;
     border:none;
     background: var(--amber);
     color:#201404;
     font-weight:600;
+    font-size: 0.95rem;
     cursor:pointer;
   }
+
+  /* Toast */
+  #toast{
+    position: fixed;
+    left: 50%; bottom: 28px;
+    transform: translate(-50%, 20px);
+    background: #0f1318;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 50;
+    max-width: 90vw;
+  }
+  #toast.show{ opacity:1; transform: translate(-50%, 0); }
+  #toast.error{ border-color: var(--danger); color: #ffb08f; }
 
   #status{
     font-size: 0.72rem;
@@ -294,6 +325,13 @@
     font-size: 0.72rem;
     color: var(--muted);
   }
+  .bcard .bactions{ display:flex; gap:14px; align-items:center; }
+  .bcard .bcopy{
+    background:none; border:none; color: var(--amber);
+    font-size: 0.72rem; cursor:pointer; padding:0;
+  }
+  .bcard .bcopy:hover{ text-decoration: underline; }
+  .bcard .btext{ white-space: pre-wrap; }
   .bcard .bremove{
     background:none; border:none; color: var(--danger);
     font-size: 0.72rem; cursor:pointer; padding:0;
@@ -399,10 +437,12 @@
       <div id="emptyBookmarks">Nothing bookmarked yet. Tap the ribbon on a message to save it here.</div>
     </div>
     <form id="composer">
-      <input id="textInput" type="text" placeholder="Type a message…" autocomplete="off" maxlength="500">
+      <textarea id="textInput" rows="2" placeholder="Type a message…  (Enter to send, Shift+Enter for a new line)" autocomplete="off" maxlength="4000"></textarea>
       <button type="submit">Send</button>
     </form>
   </div>
+
+  <div id="toast"></div>
 
   <div id="modalOverlay">
     <div id="modalBox">
@@ -473,6 +513,68 @@ let bookmarksByMsgId = {};
 // messageId -> { text, name, ts } for whatever is currently pending bookmarking
 let pendingBookmark = null;
 
+const COPY_ICON  = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>';
+const TRASH_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4M6.7 7v4M9.3 7v4"/></svg>';
+
+// Set to true if you want to be able to delete other people's messages too
+// (your database rules must allow it as well)
+const ALLOW_DELETE_ANY = false;
+
+// messageId -> DOM element, so deletions can remove the right bubble
+const msgEls = {};
+let chatStarted = false;
+
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(text, isError){
+  toastEl.textContent = text;
+  toastEl.classList.toggle('error', !!isError);
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), isError ? 5000 : 1600);
+}
+
+async function copyText(text, btn){
+  let ok = false;
+  try{
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  }catch(e){
+    // Fallback for non-secure contexts (e.g. opened as a local file)
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e2){ ok = false; }
+  }
+  if(ok){
+    showToast('Copied to clipboard');
+    if(btn && btn.classList.contains('icon-btn')){
+      btn.classList.add('copied');
+      btn.innerHTML = CHECK_ICON;
+      setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = COPY_ICON; }, 1200);
+    }
+  } else {
+    showToast('Could not copy — your browser blocked it', true);
+  }
+}
+
+function dbError(action){
+  return err => {
+    console.error(action, err);
+    const denied = err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''));
+    showToast(denied
+      ? action + ' failed: permission denied. Check your Realtime Database rules.'
+      : action + ' failed: ' + (err && err.message ? err.message : 'unknown error'), true);
+  };
+}
+
 const BOOKMARK_OUTLINE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 1.5h8a.5.5 0 0 1 .5.5v12.2a.3.3 0 0 1-.46.25L8 12.1l-4.04 2.35a.3.3 0 0 1-.46-.25V2a.5.5 0 0 1 .5-.5Z"/></svg>';
 const BOOKMARK_FILLED  = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5h8a.5.5 0 0 1 .5.5v12.2a.3.3 0 0 1-.46.25L8 12.1l-4.04 2.35a.3.3 0 0 1-.46-.25V2a.5.5 0 0 1 .5-.5Z"/></svg>';
 
@@ -540,6 +642,7 @@ function renderMessage(msgId, msg){
   foot.className = 'foot';
 
   const bBtn = document.createElement('button');
+  bBtn.type = 'button';
   bBtn.className = 'bmark-btn';
   bBtn.dataset.msgId = msgId;
   updateBookmarkButton(bBtn, msgId);
@@ -549,7 +652,30 @@ function renderMessage(msgId, msg){
   time.className = 'time';
   time.textContent = formatTime(msg.ts);
 
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'icon-btn';
+  copyBtn.title = 'Copy to clipboard';
+  copyBtn.innerHTML = COPY_ICON;
+  copyBtn.addEventListener('click', () => copyText(msg.text, copyBtn));
+
+  foot.appendChild(copyBtn);
   foot.appendChild(bBtn);
+
+  if(mine || ALLOW_DELETE_ANY){
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'icon-btn delete';
+    delBtn.title = 'Delete message';
+    delBtn.innerHTML = TRASH_ICON;
+    delBtn.addEventListener('click', () => {
+      if(confirm('Delete this message for everyone?')){
+        db.ref('messages/' + msgId).remove().catch(dbError('Delete'));
+      }
+    });
+    foot.appendChild(delBtn);
+  }
+
   foot.appendChild(time);
 
   wrap.appendChild(who);
@@ -557,16 +683,17 @@ function renderMessage(msgId, msg){
   wrap.appendChild(foot);
 
   const wasNearBottom = isNearBottom();
+  msgEls[msgId] = wrap;
   messagesEl.appendChild(wrap);
-  if(wasNearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+  if(wasNearBottom || mine) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function toggleBookmark(msgId, msg){
   const existingKey = bookmarksByMsgId[msgId];
   if(existingKey){
-    db.ref('bookmarks/' + myUid + '/' + existingKey).remove();
+    db.ref('bookmarks/' + myUid + '/' + existingKey).remove().catch(dbError('Remove bookmark'));
   } else {
-    pendingBookmark = { messageId: msgId, text: msg.text, name: msg.uid === myUid ? 'You' : msg.name, ts: msg.ts };
+    pendingBookmark = { messageId: msgId, text: msg.text || '', name: msg.uid === myUid ? 'You' : (msg.name || 'Someone'), ts: msg.ts || Date.now() };
     modalPreview.textContent = msg.text;
     modalNote.value = '';
     modalOverlay.classList.add('show');
@@ -583,16 +710,19 @@ modalNote.addEventListener('keydown', e => { if(e.key === 'Enter') saveBookmark(
 
 function saveBookmark(){
   if(!pendingBookmark) return;
-  db.ref('bookmarks/' + myUid).push({
+  const data = {
     messageId: pendingBookmark.messageId,
     text: pendingBookmark.text,
     name: pendingBookmark.name,
     ts: pendingBookmark.ts,
     note: modalNote.value.trim(),
     savedAt: firebase.database.ServerValue.TIMESTAMP
-  });
+  };
   modalOverlay.classList.remove('show');
   pendingBookmark = null;
+  db.ref('bookmarks/' + myUid).push(data)
+    .then(() => showToast('Bookmarked'))
+    .catch(dbError('Save bookmark'));
 }
 
 function renderBookmarksList(items){
@@ -619,18 +749,26 @@ function renderBookmarksList(items){
 
     const text = document.createElement('div');
     text.className = 'btext';
-    linkify(b.text, text);
+    linkify(b.text || '', text);
 
     const meta = document.createElement('div');
     meta.className = 'bmeta';
     const who = document.createElement('span');
-    who.textContent = b.name + ' · ' + formatTime(b.ts);
+    who.textContent = (b.name || '') + ' · ' + formatTime(b.ts);
     const remove = document.createElement('button');
     remove.className = 'bremove';
     remove.textContent = 'Remove';
-    remove.addEventListener('click', () => db.ref('bookmarks/' + myUid + '/' + key).remove());
+    remove.addEventListener('click', () => db.ref('bookmarks/' + myUid + '/' + key).remove().catch(dbError('Remove bookmark')));
+    const copy = document.createElement('button');
+    copy.className = 'bcopy';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', () => copyText(b.text, copy));
+    const actions = document.createElement('div');
+    actions.className = 'bactions';
+    actions.appendChild(copy);
+    actions.appendChild(remove);
     meta.appendChild(who);
-    meta.appendChild(remove);
+    meta.appendChild(actions);
 
     card.appendChild(title);
     card.appendChild(text);
@@ -651,11 +789,18 @@ tabChat.addEventListener('click', () => showTab('chat'));
 tabBookmarks.addEventListener('click', () => showTab('bookmarks'));
 
 function startChat(){
+  if(chatStarted) return;
+  chatStarted = true;
   loginEl.style.display = 'none';
   appEl.style.display = 'flex';
 
   db.ref('messages').limitToLast(100).on('child_added', snap => {
     renderMessage(snap.key, snap.val());
+  });
+  db.ref('messages').limitToLast(100).on('child_removed', snap => {
+    const el = msgEls[snap.key];
+    if(el){ el.remove(); delete msgEls[snap.key]; }
+    if(Object.keys(msgEls).length === 0) emptyEl.style.display = '';
   });
 
   const presenceRef = db.ref('presence/' + myUid);
@@ -689,11 +834,27 @@ function startChat(){
       uid: myUid,
       text: text,
       ts: firebase.database.ServerValue.TIMESTAMP
-    });
+    }).catch(dbError('Send'));
     textInput.value = '';
+    autoGrow();
   });
 
+  // Enter sends, Shift+Enter inserts a new line
+  textInput.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && !e.shiftKey && !e.isComposing){
+      e.preventDefault();
+      composer.requestSubmit();
+    }
+  });
+  textInput.addEventListener('input', autoGrow);
+
   textInput.focus();
+}
+
+function autoGrow(){
+  textInput.style.height = 'auto';
+  textInput.style.height = Math.min(textInput.scrollHeight + 2, 200) + 'px';
+  if(!textInput.value) textInput.style.height = '';
 }
 
 function nameFromEmail(email){
@@ -708,10 +869,8 @@ function enter(){
   enterBtn.disabled = true;
   statusEl.textContent = 'Opening the door…';
 
-  auth.signInWithEmailAndPassword(email, pass).then(cred => {
-    myUid = cred.user.uid;
-    myName = nameFromEmail(email);
-    startChat();
+  auth.signInWithEmailAndPassword(email, pass).then(() => {
+    // onAuthStateChanged below takes it from here
   }).catch(err => {
     console.error(err);
     statusEl.textContent = 'Wrong email or password.';
@@ -721,6 +880,14 @@ function enter(){
 
 logoutBtn.addEventListener('click', () => {
   auth.signOut().then(() => location.reload());
+});
+
+auth.onAuthStateChanged(user => {
+  if(user){
+    myUid = user.uid;
+    myName = nameFromEmail(user.email || 'user@');
+    startChat();
+  }
 });
 
 enterBtn.addEventListener('click', enter);
